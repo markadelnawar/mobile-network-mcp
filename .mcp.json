@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "rn-network": {
+      "command": "node",
+      "args": [
+        "/Users/markadel/proxyman_context_provider/dist/bin/cli.js",
+        "-i", "tracking|analytics|etracker|recapi/ingest"
+      ]
+    }
+  }
+}

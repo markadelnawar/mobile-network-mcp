@@ -1,0 +1,49 @@
+{
+  "name": "mobile-network-mcp",
+  "version": "0.1.0",
+  "description": "Token-efficient network MCP server for mobile apps — gives AI coding agents visibility into API responses via schema-first querying",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mobile-network-mcp": "dist/bin/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/bin/cli.js",
+    "test": "node --test dist/test/*.test.js",
+    "prepublishOnly": "npm run build"
+  },
+  "exports": {
+    ".": "./dist/src/index.js",
+    "./interceptor": "./interceptor.js"
+  },
+  "keywords": [
+    "mcp",
+    "react-native",
+    "ios",
+    "android",
+    "flutter",
+    "mobile",
+    "network",
+    "debugging",
+    "cdp",
+    "ai",
+    "claude"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "json-schema-sketch": "^0.1.0",
+    "ws": "^8.18.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

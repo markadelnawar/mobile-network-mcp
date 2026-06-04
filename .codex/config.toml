@@ -1,0 +1,7 @@
+[mcp_servers.rn-network]
+args = [
+    "/Users/markadel/proxyman_context_provider/dist/bin/cli.js",
+    "-i",
+    "tracking|analytics|etracker|recapi/ingest",
+]
+command = "node"
