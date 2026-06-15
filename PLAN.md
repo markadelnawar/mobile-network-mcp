@@ -12,6 +12,16 @@ iOS/Android/Flutter re-integration plan lives separately in
   flows), but needs the cursor fixes in #2 before shipping.
 - **Method 2 — RN in-app interceptor:** ⬜ not yet tested end-to-end.
 
+## Implementation status (code)
+- ✅ #1 ingest body hardening (server-side `bodyToString` + proxyman.js `asString`)
+- ✅ #2 inclusive-cursor rework: boundary-skip on ingest + reset detection/resync
+- ✅ #4 startup sweep of stale `proxyman-mcp-*` temp dirs
+- ✅ #5 port-file (`~/.mobile-network-mcp/port`) + `server_status` MCP tool; script
+  auto-provision via `--print-proxyman-script` (kept auto-bump + discovery, not fail-loud)
+- ◻️ #3 cross-method dedup — left documented (optional; content-signature merging
+  can wrongly collapse genuinely distinct flows)
+- ◻️ #6 ignore-filter tuning — config change, not code
+
 ## Inherent limits (document, not bugs)
 - Captures **network traffic only** — cached responses and client-side
   filtering/pagination are invisible to *all* methods. Confirmed live: noon

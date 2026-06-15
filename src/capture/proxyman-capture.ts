@@ -48,6 +48,9 @@ export class ProxymanCapture {
   }
 
   async start(): Promise<void> {
+    // Clean up temp dirs orphaned by a prior crash (we delete per-poll, but a
+    // SIGKILL mid-poll skips that cleanup).
+    await this.sweepStaleTempDirs();
     // Do an initial poll to pick up existing requests
     await this.poll();
     this.startPolling();
@@ -104,9 +107,18 @@ export class ProxymanCapture {
     const outDir = join(tmpdir(), `proxyman-mcp-${Date.now()}`);
 
     try {
-      await this.exportFlows(outDir);
-      const flows = await this.parseExportDir(outDir);
+      const since = this.lastSeenId > 0 ? this.lastSeenId : undefined;
+      const result = await this.exportFlows(outDir, since);
 
+      // `--since` is INCLUSIVE, so a normal incremental poll always re-returns the
+      // boundary flow (lastSeenId). "nothing to export" therefore means even the
+      // boundary is gone → Proxyman was cleared/restarted and our cursor is stale.
+      if (result.nothingToExport) {
+        if (since !== undefined) return await this.resync();
+        return 0; // first poll — Proxyman is simply empty
+      }
+
+      const flows = await this.parseExportDir(outDir);
       for (const flow of flows) {
         this.store.add(flow);
       }
@@ -118,7 +130,51 @@ export class ProxymanCapture {
     }
   }
 
-  private exportFlows(outDir: string): Promise<void> {
+  /**
+   * Proxyman's flow-ID counter dropped below our cursor (session cleared or app
+   * restarted), so `--since` would silently skip everything. Reset the cursor and
+   * re-ingest from a full export. We intentionally do NOT clear the store: it may
+   * also hold flows pushed by the ingest server, and keeping prior history is fine
+   * (the ring buffer ages it out).
+   */
+  private async resync(): Promise<number> {
+    console.error("[proxyman-capture] Proxyman reset detected — re-syncing from a full export");
+    this.lastSeenId = 0;
+    const outDir = join(tmpdir(), `proxyman-mcp-${Date.now()}`);
+    try {
+      const result = await this.exportFlows(outDir, undefined);
+      if (result.nothingToExport) return 0;
+      const flows = await this.parseExportDir(outDir);
+      for (const flow of flows) {
+        this.store.add(flow);
+      }
+      return flows.length;
+    } finally {
+      await rm(outDir, { recursive: true, force: true }).catch(() => {});
+    }
+  }
+
+  /** Best-effort cleanup of temp dirs orphaned by a prior crash. */
+  private async sweepStaleTempDirs(): Promise<void> {
+    try {
+      const base = tmpdir();
+      const entries = await readdir(base);
+      await Promise.all(
+        entries
+          .filter((e) => e.startsWith("proxyman-mcp-"))
+          .map((e) => rm(join(base, e), { recursive: true, force: true }).catch(() => {})),
+      );
+    } catch {
+      // best effort — ignore
+    }
+  }
+
+  /**
+   * Runs `proxyman-cli export-log`. Pass `since` to export only flows with ID >=
+   * since (INCLUSIVE — the boundary flow is re-returned). Resolves with
+   * `nothingToExport: true` when the CLI reports nothing above the cursor.
+   */
+  private exportFlows(outDir: string, since?: number): Promise<{ nothingToExport: boolean }> {
     return new Promise((resolve, reject) => {
       const args = ["export-log", "-o", outDir, "-f", "raw"];
 
@@ -131,22 +187,23 @@ export class ProxymanCapture {
         args.push("-m", "all");
       }
 
-      if (this.lastSeenId > 0) {
-        args.push("--since", String(this.lastSeenId));
+      if (since !== undefined && since > 0) {
+        args.push("--since", String(since));
       }
 
       execFile(this.cliPath, args, { timeout: 15_000 }, (err, stdout, stderr) => {
+        const output = (stdout ?? "") + (stderr ?? "");
         if (err) {
-          // "nothing to export" is not an error — just means no new flows
-          const output = (stdout ?? "") + (stderr ?? "");
+          // The CLI reports "nothing to export" as an error, but for us it's a
+          // meaningful signal (no flows above the cursor), not a failure.
           if (output.includes("nothing to export") || output.includes("No flows")) {
-            resolve();
+            resolve({ nothingToExport: true });
             return;
           }
           reject(err);
           return;
         }
-        resolve();
+        resolve({ nothingToExport: false });
       });
     });
   }
@@ -175,18 +232,20 @@ export class ProxymanCapture {
       flowFiles.get(flowId)![type] = join(dir, file);
     }
 
-    // Sort by flow ID ascending
     const sortedIds = [...flowFiles.keys()].sort((a, b) => a - b);
 
     const flows: CapturedFlow[] = [];
     for (const flowId of sortedIds) {
+      // `--since` is INCLUSIVE, so the boundary flow (== lastSeenId) comes back
+      // every poll. Skip anything already ingested to avoid duplicates.
+      if (flowId <= this.lastSeenId) continue;
+
       const entry = flowFiles.get(flowId)!;
       if (!entry.request) continue;
 
       const flow = await this.parseFlow(flowId, entry.request, entry.response);
-      if (flowId > this.lastSeenId) {
-        this.lastSeenId = flowId;
-      }
+      // ascending order → cursor advances monotonically (past ignored flows too)
+      this.lastSeenId = flowId;
       if (!flow) continue;
       if (this.shouldIgnore(flow.request.url)) continue;
       flows.push(flow);

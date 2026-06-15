@@ -1,6 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { homedir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import { CDPClient } from "./capture/cdp-client.js";
 import { IngestServer } from "./capture/ingest-server.js";
@@ -29,6 +32,7 @@ export interface ServerConfig {
 export async function createServer(config: ServerConfig): Promise<McpServer> {
   const store = new RequestStore(config.maxFlows);
   const source = config.source ?? "ingest";
+  let ingestPort = config.ingestPort ?? 7890;
 
   // Optional refresh hook — called before each tool invocation (used by Proxyman CLI capture)
   let onBeforeToolCall: (() => Promise<void>) | null = null;
@@ -103,14 +107,34 @@ export async function createServer(config: ServerConfig): Promise<McpServer> {
     return { content: [{ type: "text", text: getResponseRaw(store, input) }] };
   });
 
+  server.registerTool("server_status", {
+    title: "Server Status",
+    description:
+      "Report the ingest server's port and the number of captured flows. Use this to discover which port app interceptors should POST to.",
+    inputSchema: z.object({}),
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: false,
+    },
+  }, async () => {
+    await onBeforeToolCall?.();
+    const text =
+      `Ingest server: http://localhost:${ingestPort}/flows\n` +
+      `Captured flows: ${store.size}\n` +
+      `Capture source: ${source}`;
+    return { content: [{ type: "text", text }] };
+  });
+
   // --- Ingest server (always runs — accepts flows from any external interceptor) ---
 
   const ingest = new IngestServer(store, {
     port: config.ingestPort,
     ignoreUrls: config.ignoreUrls,
   });
-  ingest.start().then((port) => {
+  ingest.start().then(async (port) => {
+    ingestPort = port;
     console.error(`[mobile-network-mcp] Ingest server listening on http://localhost:${port}/flows`);
+    await writePortFile(port).catch(() => {});
   }).catch((err) => {
     console.error(`[mobile-network-mcp] Ingest server failed to start: ${err}`);
   });
@@ -178,4 +202,11 @@ export async function startServer(config: ServerConfig): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("[mobile-network-mcp] MCP server started on stdio");
+}
+
+/** Write the resolved ingest port to a fixed file so host-side clients can discover it. */
+async function writePortFile(port: number): Promise<void> {
+  const dir = join(homedir(), ".mobile-network-mcp");
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "port"), String(port), "utf-8");
 }

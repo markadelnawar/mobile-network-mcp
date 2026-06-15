@@ -146,6 +146,21 @@ export class IngestServer {
     });
   }
 
+  /**
+   * Coerce a body value to a string. Objects/arrays (e.g. JSON already parsed by an
+   * upstream interceptor) are re-serialized as JSON rather than passed through
+   * String(), which would mangle them into "[object Object]" or comma-joined text.
+   */
+  private bodyToString(body: unknown): string | undefined {
+    if (body == null) return undefined;
+    if (typeof body === "string") return body;
+    try {
+      return JSON.stringify(body);
+    } catch {
+      return String(body);
+    }
+  }
+
   private toFlow(data: Record<string, unknown>): CapturedFlow | null {
     const req = data.request as Record<string, unknown> | undefined;
     if (!req?.url || !req?.method) return null;
@@ -153,7 +168,7 @@ export class IngestServer {
     const resp = data.response as Record<string, unknown> | undefined;
     const respHeaders = (resp?.headers as Record<string, string>) ?? {};
     const contentType = respHeaders["content-type"] ?? respHeaders["Content-Type"] ?? "";
-    const respBody = resp?.body != null ? String(resp.body) : undefined;
+    const respBody = this.bodyToString(resp?.body);
 
     const flow: CapturedFlow = {
       id: 0,
@@ -161,7 +176,7 @@ export class IngestServer {
         url: String(req.url),
         method: String(req.method),
         headers: (req.headers as Record<string, string>) ?? {},
-        body: req.body != null ? String(req.body) : undefined,
+        body: this.bodyToString(req.body),
         timestamp: (data.timestamp as number) ?? Date.now() / 1000,
       },
       timing: {
