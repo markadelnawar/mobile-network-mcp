@@ -33,7 +33,7 @@ export function getResponseSchema(store: RequestStore, input: GetResponseSchemaI
   }
 
   const maxDepth = input.max_depth ?? 6;
-  const schema = inferSchema(parsed.value, 0, maxDepth);
+  const schema = inferSchema(parsed.value, { maxDepth });
   const rendered = renderSchema(schema, { showStringLengths: input.show_string_lengths ?? false });
 
   return `${header}${statusInfo}\n\nResponse schema:\n${rendered}`;

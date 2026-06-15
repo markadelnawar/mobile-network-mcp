@@ -2,6 +2,7 @@
 
 import { startServer } from "../src/index.js";
 import type { CaptureSource } from "../src/index.js";
+import { buildProxymanScript } from "../src/scripts/proxyman-script.js";
 
 interface ParsedArgs {
   port: number;
@@ -13,6 +14,7 @@ interface ParsedArgs {
   pollInterval?: number;
   ignoreUrls: string[];
   ingestPort?: number;
+  printProxymanScript: boolean;
 }
 
 function parseArgs(): ParsedArgs {
@@ -30,6 +32,7 @@ function parseArgs(): ParsedArgs {
     : undefined;
   const domains: string[] = [];
   const ignoreUrls: string[] = [];
+  let printProxymanScript = false;
 
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
@@ -64,6 +67,9 @@ function parseArgs(): ParsedArgs {
       case "--ingest-port":
         ingestPort = parseInt(args[++i], 10);
         break;
+      case "--print-proxyman-script":
+        printProxymanScript = true;
+        break;
       case "--help":
       case "-h":
         printHelp();
@@ -76,7 +82,7 @@ function parseArgs(): ParsedArgs {
     process.exit(1);
   }
 
-  return { port, host, maxFlows, source, domains, proxymanCliPath, pollInterval, ignoreUrls, ingestPort };
+  return { port, host, maxFlows, source, domains, proxymanCliPath, pollInterval, ignoreUrls, ingestPort, printProxymanScript };
 }
 
 function printHelp(): void {
@@ -104,6 +110,9 @@ CDP options (React Native 0.83+):
 
 General:
   --max-flows <count>       Max stored requests (default: 500, env: RN_MCP_MAX_FLOWS)
+  --print-proxyman-script   Print the Proxyman scripting interceptor (with the
+                            ingest port injected) and exit. Paste it into
+                            Proxyman > Tools > Scripting.
   --help, -h                Show this help
 
 Examples:
@@ -126,6 +135,11 @@ App interceptors (add to your app in dev mode):
 }
 
 const parsed = parseArgs();
+
+if (parsed.printProxymanScript) {
+  console.log(buildProxymanScript(parsed.ingestPort ?? 7890));
+  process.exit(0);
+}
 
 startServer({
   metroPort: parsed.port,

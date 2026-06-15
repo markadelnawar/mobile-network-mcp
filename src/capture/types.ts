@@ -1,6 +1,7 @@
 export interface CapturedRequest {
   url: string;
   method: string;
+  // (mark) btw this doesnt handle the mutliple headers cases , multiple set-cookies for example
   headers: Record<string, string>;
   body?: string;
   timestamp: number;
@@ -13,6 +14,7 @@ export interface CapturedResponse {
   mimeType: string;
   body?: string;
   bodySize: number;
+  // compressed
   encodedDataLength: number;
 }
 

@@ -16,22 +16,38 @@
 
 const INGEST_URL = "http://localhost:7890/flows";
 
+// Proxyman hands JSON bodies to the script as PARSED objects/arrays, but the
+// ingest contract expects body to be a STRING. Re-serialize anything that
+// isn't already a string so JSON bodies survive intact (otherwise the server
+// would turn them into "[object Object]" or comma-joined text).
+function asString(body) {
+  if (body == null) return undefined;
+  if (typeof body === "string") return body;
+  try {
+    return JSON.stringify(body);
+  } catch (e) {
+    return String(body);
+  }
+}
+
 async function onResponse(context, url, request, response) {
   try {
     await $http.post(INGEST_URL, {
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify({
         request: {
           url: url,
           method: request.method,
           headers: request.headers,
-          body: request.body,
+          body: asString(request.body),
         },
         response: {
           status: response.statusCode,
           statusText: "",
           headers: response.headers,
-          body: response.body,
+          body: asString(response.body),
         },
       }),
     });
