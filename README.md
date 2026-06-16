@@ -27,21 +27,43 @@ npm install
 npm run build
 ```
 
-## Register as an MCP server
+## Add to your MCP client
 
-```jsonc
+Quickest path — let the CLI print the config with the port already set:
+
+```bash
+npx mobile-network-mcp --print-mcp-config
+```
+
+### Claude Code
+
+Add to your project's `.mcp.json` (or run `claude mcp add`):
+
+```json
 {
   "mcpServers": {
     "rn-network": {
-      "command": "node",
-      "args": [
-        "/abs/path/to/dist/bin/cli.js",
-        "-i", "tracking|analytics|adtracker"   // ignore noisy URLs (regex)
-      ]
+      "command": "npx",
+      "args": ["-y", "mobile-network-mcp", "--ingest-port", "7890", "-i", "tracking|analytics|adtracker"]
     }
   }
 }
 ```
+
+### Codex
+
+Add to `.codex/config.toml`:
+
+```toml
+[mcp_servers.rn-network]
+command = "npx"
+args = ["-y", "mobile-network-mcp", "--ingest-port", "7890", "-i", "tracking|analytics|adtracker"]
+```
+
+`--ingest-port` sets the port the ingest server (and your interceptors) use; `-i`
+is a regex of URLs to ignore. **Restart the client** after adding. For local
+development (unpublished), swap `npx -y mobile-network-mcp` for
+`node /abs/path/to/dist/bin/cli.js`.
 
 ## Capture methods — pick ONE per traffic stream
 
@@ -93,14 +115,24 @@ build flag (not just `__DEV__`). iOS/Android/Flutter snippets live on the
 | `get_response_schema` | The **shape** of a JSON response (keys + types, no values). Start here. |
 | `query_response` | Extract specific values by path — `data.users[*].id`, multiple paths at once. |
 | `get_response_raw` | Full raw body (truncated). Escape hatch; prefer schema + query. |
+| `server_status` | Reports the ingest port + captured-flow count — find which port interceptors should POST to. |
 
 Typical flow: `list_requests` → `get_response_schema <id>` → `query_response <id> <path>`.
 
 ## CLI options
 
-Run `node dist/bin/cli.js --help` for the full list (capture source, ports,
-domain/ignore filters, poll interval, `--print-proxyman-script`).
+Run `mobile-network-mcp --help` for the full list — capture source (`--source`),
+ingest port (`--ingest-port`), domain/ignore filters (`-d` / `-i`), poll interval,
+and the helpers `--print-proxyman-script` and `--print-mcp-config`.
 
 ## Known issues & roadmap
 
 See [`PLAN.md`](./PLAN.md) for capture-pipeline findings and planned fixes.
+
+## Contributing
+
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+
+## License
+
+MIT — see [`LICENSE`](./LICENSE).

@@ -3,6 +3,7 @@
 import { startServer } from "../src/index.js";
 import type { CaptureSource } from "../src/index.js";
 import { buildProxymanScript } from "../src/scripts/proxyman-script.js";
+import { buildMcpConfigHelp } from "../src/scripts/mcp-config.js";
 
 interface ParsedArgs {
   port: number;
@@ -15,6 +16,7 @@ interface ParsedArgs {
   ignoreUrls: string[];
   ingestPort?: number;
   printProxymanScript: boolean;
+  printMcpConfig: boolean;
 }
 
 function parseArgs(): ParsedArgs {
@@ -33,6 +35,7 @@ function parseArgs(): ParsedArgs {
   const domains: string[] = [];
   const ignoreUrls: string[] = [];
   let printProxymanScript = false;
+  let printMcpConfig = false;
 
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
@@ -70,6 +73,9 @@ function parseArgs(): ParsedArgs {
       case "--print-proxyman-script":
         printProxymanScript = true;
         break;
+      case "--print-mcp-config":
+        printMcpConfig = true;
+        break;
       case "--help":
       case "-h":
         printHelp();
@@ -82,7 +88,7 @@ function parseArgs(): ParsedArgs {
     process.exit(1);
   }
 
-  return { port, host, maxFlows, source, domains, proxymanCliPath, pollInterval, ignoreUrls, ingestPort, printProxymanScript };
+  return { port, host, maxFlows, source, domains, proxymanCliPath, pollInterval, ignoreUrls, ingestPort, printProxymanScript, printMcpConfig };
 }
 
 function printHelp(): void {
@@ -113,6 +119,8 @@ General:
   --print-proxyman-script   Print the Proxyman scripting interceptor (with the
                             ingest port injected) and exit. Paste it into
                             Proxyman > Tools > Scripting.
+  --print-mcp-config        Print ready-to-paste MCP config for Claude Code and
+                            Codex (with the ingest port) and exit.
   --help, -h                Show this help
 
 Examples:
@@ -138,6 +146,11 @@ const parsed = parseArgs();
 
 if (parsed.printProxymanScript) {
   console.log(buildProxymanScript(parsed.ingestPort ?? 7890));
+  process.exit(0);
+}
+
+if (parsed.printMcpConfig) {
+  console.log(buildMcpConfigHelp(parsed.ingestPort ?? 7890));
   process.exit(0);
 }
 
