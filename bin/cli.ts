@@ -150,7 +150,12 @@ if (parsed.printProxymanScript) {
 }
 
 if (parsed.printMcpConfig) {
-  console.log(buildMcpConfigHelp(parsed.ingestPort ?? 7890));
+  console.log(buildMcpConfigHelp({
+    ingestPort: parsed.ingestPort ?? 7890,
+    source: parsed.source,
+    domains: parsed.domains,
+    ignoreUrls: parsed.ignoreUrls,
+  }));
   process.exit(0);
 }
 

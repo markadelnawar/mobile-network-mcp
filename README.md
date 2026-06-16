@@ -65,6 +65,15 @@ is a regex of URLs to ignore. **Restart the client** after adding. For local
 development (unpublished), swap `npx -y mobile-network-mcp` for
 `node /abs/path/to/dist/bin/cli.js`.
 
+**Persisting a capture source** — any flag in `args` sticks. To always run, say,
+Proxyman CLI capture:
+
+```json
+"args": ["-y", "mobile-network-mcp", "--source", "proxyman", "-d", "api.example.com", "--ingest-port", "7890"]
+```
+
+Or generate that block: `mobile-network-mcp --source proxyman -d api.example.com --print-mcp-config`.
+
 ## Capture methods — pick ONE per traffic stream
 
 The ingest HTTP server (default port **7890**) always runs. Choose how flows
@@ -77,8 +86,8 @@ Generate the script with the ingest port already injected, then paste it into
 Proxyman:
 
 ```bash
-node dist/bin/cli.js --print-proxyman-script                 # uses port 7890
-node dist/bin/cli.js --print-proxyman-script --ingest-port 7895
+mobile-network-mcp --print-proxyman-script                 # uses port 7890
+mobile-network-mcp --print-proxyman-script --ingest-port 7895
 ```
 
 Then in Proxyman → **Tools → Scripting**: enable the tool, new script (Cmd+N),
@@ -87,7 +96,7 @@ set URL to `*`, check both **Request** and **Response**, paste, and save.
 ### 2. Proxyman CLI capture — no scripting, polls `proxyman-cli`
 
 ```bash
-node dist/bin/cli.js --source proxyman -d api.example.com
+mobile-network-mcp --source proxyman -d api.example.com
 ```
 
 Polls Proxyman's export and writes to the store directly (port-independent).
@@ -121,9 +130,47 @@ Typical flow: `list_requests` → `get_response_schema <id>` → `query_response
 
 ## CLI options
 
-Run `mobile-network-mcp --help` for the full list — capture source (`--source`),
-ingest port (`--ingest-port`), domain/ignore filters (`-d` / `-i`), poll interval,
-and the helpers `--print-proxyman-script` and `--print-mcp-config`.
+The command is **`mobile-network-mcp`** once installed (`npm i -g mobile-network-mcp`)
+or run on demand via **`npx mobile-network-mcp …`**. For local development use
+`node dist/bin/cli.js …`. **Every flag below can also go in your MCP client's
+`args` array to persist it** (e.g. `--source proxyman`).
+
+**Capture source**
+
+| Flag | Default (env) | Description |
+|------|---------------|-------------|
+| `--source`, `-s` | `ingest` (`RN_MCP_SOURCE`) | Active capture source: `ingest`, `proxyman`, or `cdp`. The ingest HTTP server always runs regardless. |
+
+**Ingest (all modes)**
+
+| Flag | Default (env) | Description |
+|------|---------------|-------------|
+| `--ingest-port` | `7890` (`RN_INGEST_PORT`) | Port the ingest HTTP server listens on (interceptors POST here). |
+| `--ignore-url`, `-i` | — | Drop captured URLs matching this regex. Repeatable. |
+
+**Proxyman (`--source proxyman`)**
+
+| Flag | Default (env) | Description |
+|------|---------------|-------------|
+| `--domain`, `-d` | — | Capture only these domains. Repeatable. |
+| `--proxyman-cli` | Proxyman.app default (`RN_PROXYMAN_CLI`) | Path to the `proxyman-cli` binary. |
+| `--poll-interval` | `2000` (`RN_POLL_INTERVAL`) | How often (ms) to poll `proxyman-cli`. |
+
+**CDP — React Native Metro (`--source cdp`, RN 0.83+)**
+
+| Flag | Default (env) | Description |
+|------|---------------|-------------|
+| `--port`, `-p` | `8081` (`RN_METRO_PORT`) | Metro bundler port. |
+| `--host` | `localhost` (`RN_METRO_HOST`) | Metro bundler host. |
+
+**General & helpers**
+
+| Flag | Default (env) | Description |
+|------|---------------|-------------|
+| `--max-flows` | `500` (`RN_MCP_MAX_FLOWS`) | Max stored requests (ring-buffer capacity). |
+| `--print-proxyman-script` | — | Print the Proxyman scripting interceptor (ingest port injected) and exit. |
+| `--print-mcp-config` | — | Print Claude + Codex MCP config — reflecting any `--source` / `-d` / `-i` / `--ingest-port` you pass — and exit. |
+| `--help`, `-h` | — | Show help. |
 
 ## Known issues & roadmap
 
