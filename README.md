@@ -9,7 +9,9 @@ dumping whole responses into the context window.
 Pasting a 300 KB JSON response into a chat burns the context window. This server
 captures your app's network flows and exposes them through tools that let an AI:
 learn a response's **shape** for a few hundred tokens, **query** just the fields
-it needs, and fall back to the **raw** body only as a last resort.
+it needs, and fall back to the **raw** body only as a last resort. That
+shape-and-query engine is [**json-schema-sketch**](https://www.npmjs.com/package/json-schema-sketch),
+a standalone package extracted from this project.
 
 ## How it works
 
