@@ -42,7 +42,7 @@ Add to your project's `.mcp.json` (or run `claude mcp add`):
 ```json
 {
   "mcpServers": {
-    "rn-network": {
+    "mobile-network-mcp": {
       "command": "npx",
       "args": ["-y", "mobile-network-mcp", "--ingest-port", "7890", "-i", "tracking|analytics|adtracker"]
     }
@@ -55,7 +55,7 @@ Add to your project's `.mcp.json` (or run `claude mcp add`):
 Add to `.codex/config.toml`:
 
 ```toml
-[mcp_servers.rn-network]
+[mcp_servers.mobile-network-mcp]
 command = "npx"
 args = ["-y", "mobile-network-mcp", "--ingest-port", "7890", "-i", "tracking|analytics|adtracker"]
 ```
@@ -79,7 +79,7 @@ Or generate that block: `mobile-network-mcp --source proxyman -d api.example.com
 `--source` (in `args`) picks how flows are captured. The **ingest HTTP server
 always runs**, so `--source` adds an *active* source on top. Absent → `ingest`.
 Only the `args` array changes between modes (same `"command": "npx"` /
-`rn-network` wrapper shown above; for Codex put the same array in
+`mobile-network-mcp` wrapper shown above; for Codex put the same array in
 `.codex/config.toml`):
 
 **`ingest`** — default; flows pushed by an in-app interceptor or the Proxyman script:

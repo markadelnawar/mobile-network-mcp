@@ -27,7 +27,7 @@ function buildArgs(opts: McpConfigOptions): string[] {
 /** Claude Code `.mcp.json` block. */
 export function buildClaudeConfig(opts: McpConfigOptions): string {
   return JSON.stringify(
-    { mcpServers: { "rn-network": { command: "npx", args: buildArgs(opts) } } },
+    { mcpServers: { "mobile-network-mcp": { command: "npx", args: buildArgs(opts) } } },
     null,
     2,
   );
@@ -38,7 +38,7 @@ export function buildCodexConfig(opts: McpConfigOptions): string {
   const args = buildArgs(opts)
     .map((a) => `"${a}"`)
     .join(", ");
-  return `[mcp_servers.rn-network]
+  return `[mcp_servers.mobile-network-mcp]
 command = "npx"
 args = [${args}]`;
 }
