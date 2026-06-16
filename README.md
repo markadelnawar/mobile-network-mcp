@@ -106,6 +106,12 @@ The ingest HTTP server (default port **7890**) always runs. Choose how flows
 reach it. ⚠️ Don't run two methods that see the same traffic (e.g. Proxyman
 scripting **and** `--source proxyman`) — you'll get duplicates.
 
+> **The server is launched by your MCP client** from the `args` in your config —
+> you don't run it by hand, and the source is fixed **at launch** (not switchable
+> mid-session). To change methods, edit your config `args` and restart the client.
+> The only commands you run yourself are the `--print-…` helpers below (they just
+> print and exit).
+
 ### 1. Proxyman scripting — recommended (captures everything, incl. native)
 
 Generate the script with the ingest port already injected, then paste it into
@@ -121,11 +127,11 @@ set URL to `*`, check both **Request** and **Response**, paste, and save.
 
 ### 2. Proxyman CLI capture — no scripting, polls `proxyman-cli`
 
-```bash
-mobile-network-mcp --source proxyman -d api.example.com
-```
-
-Polls Proxyman's export and writes to the store directly (port-independent).
+Set `--source proxyman` (plus `-d <domain>` to scope) in your config `args` — see
+[Choosing the capture source](#choosing-the-capture-source). The server then polls
+Proxyman's export and writes to the store directly (port-independent). *(For a
+quick local test outside the MCP client: `node dist/bin/cli.js --source proxyman
+-d api.example.com`.)*
 
 ### 3. In-app interceptor — React Native, no proxy needed
 
