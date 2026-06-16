@@ -25,6 +25,14 @@
     "interceptors"
   ],
   "author": "Mark Nawar",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/markadelnawar/mobile-network-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/markadelnawar/mobile-network-mcp/issues"
+  },
+  "homepage": "https://github.com/markadelnawar/mobile-network-mcp#readme",
   "keywords": [
     "mcp",
     "react-native",
