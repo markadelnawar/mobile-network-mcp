@@ -9,8 +9,8 @@ dumping whole responses into the context window.
 Pasting a 300 KB JSON response into a chat burns the context window. This server
 captures your app's network flows and exposes them through tools that let an AI:
 learn a response's **shape** for a few hundred tokens, **query** just the fields
-it needs, and fall back to the **raw** body only as a last resort. That
-shape-and-query engine is [**json-schema-sketch**](https://www.npmjs.com/package/json-schema-sketch),
+it needs, and fall back to the **raw** body only as a last resort. The shape and
+query logic comes from [**json-schema-sketch**](https://www.npmjs.com/package/json-schema-sketch),
 a standalone package extracted from this project.
 
 ## How it works
@@ -39,12 +39,17 @@ The **push** doors (interceptor, Proxyman script) POST into the ingest server; t
 **pull** doors (Proxyman CLI, CDP) write to the store directly. Everything funnels
 into one in-memory store, and the four tools read from it.
 
-## Install & build
+## Install
+
+You don't need to install anything to *use* it — the MCP config below runs it via
+`npx mobile-network-mcp` (npx fetches it on demand). For a global command instead:
 
 ```bash
-npm install
-npm run build
+npm i -g mobile-network-mcp     # then: mobile-network-mcp --help
 ```
+
+**Building from source** (contributors): clone the repo, then `npm install` (pulls
+the project's dependencies) and `npm run build` (compiles TypeScript → `dist/`).
 
 ## Add to your MCP client
 
@@ -181,7 +186,7 @@ Typical flow: `list_requests` → `get_response_schema <id>` → `query_response
 
 `get_response_schema` and `query_response` are powered by
 [**json-schema-sketch**](https://www.npmjs.com/package/json-schema-sketch) — the
-schema-inference + JSON-path engine behind the token savings, extracted from this
+schema-inference and JSON-path library behind the token savings, extracted from this
 project and published as a standalone package.
 
 ## CLI options
