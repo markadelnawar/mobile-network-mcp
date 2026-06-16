@@ -74,6 +74,32 @@ Proxyman CLI capture:
 
 Or generate that block: `mobile-network-mcp --source proxyman -d api.example.com --print-mcp-config`.
 
+### Choosing the capture source
+
+`--source` (in `args`) picks how flows are captured. The **ingest HTTP server
+always runs**, so `--source` adds an *active* source on top. Absent → `ingest`.
+Only the `args` array changes between modes (same `"command": "npx"` /
+`rn-network` wrapper shown above; for Codex put the same array in
+`.codex/config.toml`):
+
+**`ingest`** — default; flows pushed by an in-app interceptor or the Proxyman script:
+
+```json
+"args": ["-y", "mobile-network-mcp", "--ingest-port", "7890", "-i", "tracking|analytics|adtracker"]
+```
+
+**`proxyman`** — server polls `proxyman-cli`; no in-app/script setup, sees native traffic too:
+
+```json
+"args": ["-y", "mobile-network-mcp", "--source", "proxyman", "-d", "api.example.com", "--ingest-port", "7890", "-i", "tracking|analytics|adtracker"]
+```
+
+**`cdp`** — React Native Metro inspector, **RN 0.83+ only**:
+
+```json
+"args": ["-y", "mobile-network-mcp", "--source", "cdp", "--port", "8081", "-i", "tracking|analytics|adtracker"]
+```
+
 ## Capture methods — pick ONE per traffic stream
 
 The ingest HTTP server (default port **7890**) always runs. Choose how flows
