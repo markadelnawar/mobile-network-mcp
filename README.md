@@ -13,12 +13,29 @@ it needs, and fall back to the **raw** body only as a last resort.
 
 ## How it works
 
-```
-[app traffic] ──(one of 3 capture methods)──▶ RequestStore ──(4 MCP tools)──▶ AI agent
-                                              (bounded ring buffer)
+```mermaid
+flowchart LR
+  subgraph cap["Capture — pick one per stream"]
+    direction TB
+    INT["In-app interceptor<br/>(interceptor.js)"]
+    PS["Proxyman scripting"]
+    PC["Proxyman CLI poll<br/>--source proxyman"]
+    CDP["Metro CDP<br/>--source cdp · RN 0.83+"]
+  end
+
+  INT -- "POST /flows" --> IG["Ingest HTTP server<br/>:7890"]
+  PS  -- "POST /flows" --> IG
+  IG --> STORE["RequestStore<br/>in-memory ring buffer"]
+  PC -- "poll + parse" --> STORE
+  CDP -- "Network.* events" --> STORE
+
+  STORE --> TOOLS["MCP tools<br/>list_requests · get_response_schema<br/>query_response · get_response_raw"]
+  TOOLS -- "stdio (MCP)" --> AI(["AI agent"])
 ```
 
-All capture methods funnel into one in-memory store; the four tools read from it.
+The **push** doors (interceptor, Proxyman script) POST into the ingest server; the
+**pull** doors (Proxyman CLI, CDP) write to the store directly. Everything funnels
+into one in-memory store, and the four tools read from it.
 
 ## Install & build
 
