@@ -177,6 +177,11 @@ build flag (not just `__DEV__`). iOS/Android/Flutter snippets live on the
 
 Typical flow: `list_requests` → `get_response_schema <id>` → `query_response <id> <path>`.
 
+`get_response_schema` and `query_response` are powered by
+[**json-schema-sketch**](https://www.npmjs.com/package/json-schema-sketch) — the
+schema-inference + JSON-path engine behind the token savings, extracted from this
+project and published as a standalone package.
+
 ## CLI options
 
 The command is **`mobile-network-mcp`** once installed (`npm i -g mobile-network-mcp`)
