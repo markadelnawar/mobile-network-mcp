@@ -1,3 +1,6 @@
 node_modules/
 dist/
 *.tsbuildinfo
+
+# local MCP client config — keep out of the public repo
+.codex/
