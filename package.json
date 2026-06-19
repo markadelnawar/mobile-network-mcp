@@ -1,6 +1,6 @@
 {
   "name": "mobile-network-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Token-efficient network MCP server for mobile apps — gives AI coding agents visibility into API responses via schema-first querying",
   "type": "module",
   "main": "dist/src/index.js",

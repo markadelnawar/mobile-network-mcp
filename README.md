@@ -61,7 +61,34 @@ npx mobile-network-mcp --print-mcp-config
 
 ### Claude Code
 
-Add to your project's `.mcp.json` (or run `claude mcp add`):
+One command — everything after `--` is the server's launch command and flags:
+
+```bash
+claude mcp add mobile-network-mcp -- npx -y mobile-network-mcp --ingest-port 7890 -i "tracking|analytics|adtracker"
+```
+
+The `--` is **required**, not cosmetic: it tells `claude mcp add` to stop parsing
+flags and hand the rest to the subprocess. Without it, `-i` would be swallowed by
+`claude` instead of reaching the server.
+
+Pick where it's saved with `--scope` (default `local`):
+
+```bash
+claude mcp add --scope project mobile-network-mcp -- npx -y mobile-network-mcp --ingest-port 7890 -i "tracking|analytics|adtracker"
+```
+
+- `local` (default) — only you, only this project (stored in your user settings).
+- `project` — writes a committable `.mcp.json` in the repo, so teammates get it too.
+- `user` — available across all your projects on this machine.
+
+Verify and inspect:
+
+```bash
+claude mcp list                    # health-checks each server
+claude mcp get mobile-network-mcp  # show the resolved command + args
+```
+
+`--scope project` produces the `.mcp.json` below; you can also write it by hand:
 
 ```json
 {
@@ -76,7 +103,19 @@ Add to your project's `.mcp.json` (or run `claude mcp add`):
 
 ### Codex
 
-Add to `.codex/config.toml`:
+Same one-command shape — everything after `--` is the server's launch command:
+
+```bash
+codex mcp add mobile-network-mcp -- npx -y mobile-network-mcp --ingest-port 7890 -i "tracking|analytics|adtracker"
+```
+
+As with Claude, the `--` is **required**: it separates Codex's own flags from the
+subprocess, so `-i` reaches the server instead of being parsed by `codex`. Codex
+has no per-project scope — this writes to your global `~/.codex/config.toml`.
+
+Verify with `codex mcp list` / `codex mcp get mobile-network-mcp` (run
+`codex mcp --help` for the full set). The command produces the TOML block below,
+which you can also write by hand:
 
 ```toml
 [mcp_servers.mobile-network-mcp]
