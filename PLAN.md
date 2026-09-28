@@ -18,6 +18,10 @@ iOS/Android/Flutter re-integration plan lives separately in
   `Network.enable` after Metro reconnects (app reload silently killed capture).
 
 ## Implementation status (code)
+- ✅ `--source auto` is the default: ingest always + CDP once Metro exposes a RN
+  0.83+ app (retries forever; "unsupported method" from older Hermes ends the
+  attempt and `server_status` explains). `init` subcommand inspects the project /
+  Metro / proxyman-cli, prints the decision and config, `--write` merges `.mcp.json`.
 - ✅ #1 ingest body hardening (server-side `bodyToString` + proxyman.js `asString`)
 - ✅ #2 inclusive-cursor rework: boundary-skip on ingest + reset detection/resync
 - ✅ #4 startup sweep of stale `proxyman-mcp-*` temp dirs

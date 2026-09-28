@@ -5,9 +5,8 @@ import { homedir } from "node:os";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { CDPClient, isNetworkDomainUnsupported } from "./capture/cdp-client.js";
+import { startCdpSource, type CdpSourceHandle } from "./capture/cdp-source.js";
 import { IngestServer } from "./capture/ingest-server.js";
-import { NetworkCapture } from "./capture/network-capture.js";
 import { ProxymanCapture } from "./capture/proxyman-capture.js";
 import { RequestStore } from "./store/request-store.js";
 import { listRequests, listRequestsSchema } from "./tools/list-requests.js";
@@ -15,7 +14,15 @@ import { getResponseSchema, getResponseSchemaInputSchema } from "./tools/get-res
 import { queryResponse, queryResponseSchema } from "./tools/query-response.js";
 import { getResponseRaw, getResponseRawSchema } from "./tools/get-response-raw.js";
 
-export type CaptureSource = "proxyman" | "cdp" | "ingest";
+/**
+ * `auto` (default): the ingest server always runs, and the server keeps trying
+ * to attach to Metro's inspector; on React Native 0.83+ that makes CDP the
+ * capture door with nothing added to the app, older runtimes fall back to
+ * ingest. `cdp` is the same path made explicit; `ingest` skips the Metro
+ * attempt; `proxyman` polls proxyman-cli instead.
+ */
+export type CaptureSource = "auto" | "proxyman" | "cdp" | "ingest";
+export const CAPTURE_SOURCES: readonly CaptureSource[] = ["auto", "proxyman", "cdp", "ingest"];
 
 export interface ServerConfig {
   metroPort: number;
@@ -31,8 +38,26 @@ export interface ServerConfig {
 
 export async function createServer(config: ServerConfig): Promise<McpServer> {
   const store = new RequestStore(config.maxFlows);
-  const source = config.source ?? "ingest";
+  const source = config.source ?? "auto";
   let ingestPort = config.ingestPort ?? 7890;
+  let cdpSource: CdpSourceHandle | null = null;
+
+  const describeSource = (): string => {
+    if (source === "proxyman") return "proxyman (polling proxyman-cli)";
+    if (source === "ingest") return "ingest (flows are pushed by interceptor.js or the Proxyman script)";
+    const s = cdpSource?.status();
+    const where = `Metro ${config.metroHost}:${config.metroPort}`;
+    switch (s?.state) {
+      case "connected":
+        return `${source} → CDP connected to ${where}`;
+      case "reconnecting":
+        return `${source} → CDP reconnecting to ${where}; flows still arrive via the ingest server`;
+      case "unsupported":
+        return `${source} → ingest only; CDP unavailable: ${s.detail}`;
+      default:
+        return `${source} → waiting for a React Native app on ${where} (${s?.attempts ?? 0} attempt(s)${s?.detail ? `, last: ${s.detail}` : ""}); flows still arrive via the ingest server`;
+    }
+  };
 
   // Optional refresh hook — called before each tool invocation (used by Proxyman CLI capture)
   let onBeforeToolCall: (() => Promise<void>) | null = null;
@@ -121,7 +146,7 @@ export async function createServer(config: ServerConfig): Promise<McpServer> {
     const text =
       `Ingest server: http://localhost:${ingestPort}/flows\n` +
       `Captured flows: ${store.size}\n` +
-      `Capture source: ${source}`;
+      `Capture source: ${describeSource()}`;
     return { content: [{ type: "text", text }] };
   });
 
@@ -154,77 +179,17 @@ export async function createServer(config: ServerConfig): Promise<McpServer> {
     }).catch((err) => {
       console.error(`[mobile-network-mcp] Proxyman capture failed to start: ${err}`);
     });
-  } else if (source === "cdp") {
-    const cdp = new CDPClient(config.metroPort, config.metroHost);
-    const capture = new NetworkCapture(cdp, store, { ignoreUrls: config.ignoreUrls });
-    connectWithRetry(cdp, capture, config).catch(() => {
-      // Connection retries are handled internally
+  } else if (source === "cdp" || source === "auto") {
+    cdpSource = startCdpSource({
+      store,
+      metroHost: config.metroHost,
+      metroPort: config.metroPort,
+      ignoreUrls: config.ignoreUrls,
     });
   }
   // source === "ingest" — ingest server only, no active capture
 
   return server;
-}
-
-const CDP_RETRY_DELAY_MS = 3000;
-const ENABLE_ATTEMPTS = 3;
-
-/**
- * Drive `connect()` until Metro exposes a debuggable app — MCP clients launch
- * this server at session start, usually *before* the developer has started the
- * app — then enable the Network domain. From the first successful connection on,
- * CDPClient owns reconnection (app relaunch, Metro restart) and NetworkCapture
- * re-enables the domain via onConnected, so this loop ends there. It also ends
- * when the runtime says the Network domain does not exist (React Native < 0.83):
- * retrying would never help, and the ingest server remains the way in.
- */
-async function connectWithRetry(
-  cdp: CDPClient,
-  capture: NetworkCapture,
-  config: ServerConfig,
-): Promise<void> {
-  const where = `${config.metroHost}:${config.metroPort}`;
-  for (let attempt = 1; ; attempt++) {
-    try {
-      await cdp.connect();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      // Log the first few failures and then every 20th (~1/min) so a missing app doesn't flood stderr.
-      if (attempt <= 3 || attempt % 20 === 0) {
-        console.error(
-          `[mobile-network-mcp] Metro connection attempt ${attempt} failed: ${message} — retrying every ${CDP_RETRY_DELAY_MS / 1000}s`,
-        );
-      }
-      await new Promise((r) => setTimeout(r, CDP_RETRY_DELAY_MS));
-      continue;
-    }
-
-    for (let enableAttempt = 1; enableAttempt <= ENABLE_ATTEMPTS; enableAttempt++) {
-      try {
-        await capture.start();
-        console.error(`[mobile-network-mcp] Connected to Metro on ${where}${attempt > 1 ? ` (attempt ${attempt})` : ""}`);
-        return;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        if (isNetworkDomainUnsupported(err)) {
-          console.error(
-            `[mobile-network-mcp] CDP capture unavailable — the runtime has no CDP Network domain (React Native < 0.83): ${message}. ` +
-              `Flows still arrive through the ingest server: add interceptor.js to the app or paste the Proxyman script (--print-proxyman-script).`,
-          );
-          await cdp.disconnect();
-          return;
-        }
-        if (!cdp.connected) {
-          console.error(`[mobile-network-mcp] Socket dropped while enabling capture (${message}); it will be re-enabled on reconnect`);
-          return;
-        }
-        console.error(`[mobile-network-mcp] Network.enable failed (${message}) — retry ${enableAttempt}/${ENABLE_ATTEMPTS}`);
-        await new Promise((r) => setTimeout(r, CDP_RETRY_DELAY_MS));
-      }
-    }
-    console.error(`[mobile-network-mcp] Network.enable kept failing on an open socket; capture will resume if Metro reconnects`);
-    return;
-  }
 }
 
 /** Start the MCP server with stdio transport. */

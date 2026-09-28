@@ -53,7 +53,22 @@ the project's dependencies) and `npm run build` (compiles TypeScript → `dist/`
 
 ## Add to your MCP client
 
-Quickest path — let the CLI print the config with the port already set:
+Quickest path — let `init` inspect the project and the machine, pick the capture
+door, and write the config (run it inside your app's repo):
+
+```bash
+npx mobile-network-mcp init            # explains the decision + prints the config
+npx mobile-network-mcp init --write    # …and merges it into ./.mcp.json (Claude Code)
+npx mobile-network-mcp init --client both
+```
+
+It reads `react-native` from `package.json`, checks whether Metro (`:8081`) has an
+app attached and whether `proxyman-cli` is installed, then recommends: **CDP via
+Metro** for React Native 0.83+ (nothing to add to the app), the **in-app
+interceptor / Proxyman script** for older React Native, or **Proxyman CLI polling**
+for native/Flutter apps — and lists the remaining steps.
+
+Or just print the config with the port already set:
 
 ```bash
 npx mobile-network-mcp --print-mcp-config
@@ -140,15 +155,24 @@ Or generate that block: `mobile-network-mcp --source proxyman -d api.example.com
 ### Choosing the capture source
 
 `--source` (in `args`) picks how flows are captured. The **ingest HTTP server
-always runs**, so `--source` adds an *active* source on top. Absent → `ingest`.
+always runs**, so `--source` adds an *active* source on top. Absent → `auto`.
 Only the `args` array changes between modes (same `"command": "npx"` /
 `mobile-network-mcp` wrapper shown above; for Codex put the same array in
 `.codex/config.toml`):
 
-**`ingest`** — default; flows pushed by an in-app interceptor or the Proxyman script:
+**`auto`** — default. Keeps attaching to Metro's inspector until a React Native app
+shows up and captures over CDP (RN 0.83+); an older runtime answers "unsupported"
+and the server says so — flows then come through the ingest server instead.
+`server_status` reports which one is active:
 
 ```json
-"args": ["-y", "mobile-network-mcp", "--ingest-port", "7890", "-i", "tracking|analytics|adtracker"]
+"args": ["-y", "mobile-network-mcp", "--ingest-port", "7890", "-i", "tracking|analytics|adtracker|symbolicate"]
+```
+
+**`ingest`** — never touch Metro; flows are pushed by an in-app interceptor or the Proxyman script:
+
+```json
+"args": ["-y", "mobile-network-mcp", "--source", "ingest", "--ingest-port", "7890", "-i", "tracking|analytics|adtracker"]
 ```
 
 **`proxyman`** — server polls `proxyman-cli`; no in-app/script setup, sees native traffic too:
@@ -157,7 +181,7 @@ Only the `args` array changes between modes (same `"command": "npx"` /
 "args": ["-y", "mobile-network-mcp", "--source", "proxyman", "-d", "api.example.com", "--ingest-port", "7890", "-i", "tracking|analytics|adtracker"]
 ```
 
-**`cdp`** — React Native Metro inspector, **RN 0.83+ only**:
+**`cdp`** — same door as `auto`, made explicit (React Native Metro inspector, **RN 0.83+**):
 
 ```json
 "args": ["-y", "mobile-network-mcp", "--source", "cdp", "--port", "8081", "-i", "tracking|analytics|adtracker"]
@@ -249,7 +273,7 @@ or run on demand via **`npx mobile-network-mcp …`**. For local development use
 
 | Flag | Default (env) | Description |
 |------|---------------|-------------|
-| `--source`, `-s` | `ingest` (`RN_MCP_SOURCE`) | Active capture source: `ingest`, `proxyman`, or `cdp`. The ingest HTTP server always runs regardless. |
+| `--source`, `-s` | `auto` (`RN_MCP_SOURCE`) | Active capture source: `auto` (CDP when Metro has a RN 0.83+ app, else ingest), `cdp`, `ingest`, or `proxyman`. The ingest HTTP server always runs regardless. |
 
 **Ingest (all modes)**
 
@@ -280,6 +304,7 @@ or run on demand via **`npx mobile-network-mcp …`**. For local development use
 | `--max-flows` | `500` (`RN_MCP_MAX_FLOWS`) | Max stored requests (ring-buffer capacity). |
 | `--print-proxyman-script` | — | Print the Proxyman scripting interceptor (ingest port injected) and exit. |
 | `--print-mcp-config` | — | Print Claude + Codex MCP config — reflecting any `--source` / `-d` / `-i` / `--ingest-port` you pass — and exit. |
+| `init` (subcommand) | — | Inspect `package.json` + Metro + Proxyman, recommend the capture door, print the config; `--write` merges it into `./.mcp.json`, `--client claude\|codex\|both` picks the format. |
 | `--help`, `-h` | — | Show help. |
 
 ## Known issues & roadmap

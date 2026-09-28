@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import type { RequestStore } from "../store/request-store.js";
 import type { CapturedFlow, CapturedRequest, CapturedResponse } from "./types.js";
 
-const DEFAULT_CLI_PATH = "/Applications/Proxyman.app/Contents/MacOS/proxyman-cli";
+export const DEFAULT_CLI_PATH = "/Applications/Proxyman.app/Contents/MacOS/proxyman-cli";
 const DEFAULT_POLL_INTERVAL_MS = 2000;
 
 export interface ProxymanCaptureOptions {

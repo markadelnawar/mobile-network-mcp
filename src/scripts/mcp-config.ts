@@ -4,19 +4,20 @@
  * --source, -d, -i, --ingest-port) so the chosen settings PERSIST in the config.
  */
 
-const DEFAULT_IGNORE = "tracking|analytics|adtracker";
+/** Trackers, analytics beacons, and Metro's own /symbolicate calls (RedBox stack traces). */
+export const DEFAULT_IGNORE = "tracking|analytics|adtracker|symbolicate";
 
 export interface McpConfigOptions {
   ingestPort: number;
-  source?: string; // omitted from args when "ingest" (the default)
+  source?: string; // omitted from args when "auto" (the default)
   domains?: string[];
   ignoreUrls?: string[];
 }
 
 /** The `args` array the MCP client launches the server with. */
-function buildArgs(opts: McpConfigOptions): string[] {
+export function buildArgs(opts: McpConfigOptions): string[] {
   const args = ["-y", "mobile-network-mcp"];
-  if (opts.source && opts.source !== "ingest") args.push("--source", opts.source);
+  if (opts.source && opts.source !== "auto") args.push("--source", opts.source);
   args.push("--ingest-port", String(opts.ingestPort));
   for (const d of opts.domains ?? []) args.push("-d", d);
   const ignores = opts.ignoreUrls && opts.ignoreUrls.length > 0 ? opts.ignoreUrls : [DEFAULT_IGNORE];
