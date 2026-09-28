@@ -151,6 +151,18 @@ describe("RequestStore.getParsedJson repair", () => {
     assert.equal(flow._jsonRepaired, true);
   });
 
+  it("does not repair an unparseable body the source did not flag as truncated", () => {
+    const store = new RequestStore();
+    const flow = store.add(
+      makeFlow({
+        response: { status: 200, statusText: "OK", headers: {}, mimeType: "application/json", body: '{"items":[{"id":1},{"id":2,"name":"ab', bodySize: 38, encodedDataLength: 38 },
+      }),
+    );
+    const parsed = store.getParsedJson(flow);
+    assert.equal(parsed.ok, false);
+    assert.equal(flow._jsonRepaired, undefined);
+  });
+
   it("still reports non-JSON bodies as not JSON", () => {
     const store = new RequestStore();
     const flow = store.add(

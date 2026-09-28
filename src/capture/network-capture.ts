@@ -1,4 +1,4 @@
-import type { CDPClient } from "./cdp-client.js";
+import type { CDPClientLike } from "./cdp-client.js";
 import type { RequestStore } from "../store/request-store.js";
 import type { CapturedFlow, CapturedRequest, CapturedResponse } from "./types.js";
 import { compileIgnorePatterns, matchesAnyPattern } from "./url-filter.js";
@@ -16,17 +16,26 @@ export class NetworkCapture {
   /** In-flight requests keyed by CDP requestId (string) */
   private inflight = new Map<string, CapturedFlow>();
   private ignorePatterns: RegExp[];
+  private listening = false;
 
   constructor(
-    private cdp: CDPClient,
+    private cdp: CDPClientLike,
     private store: RequestStore,
     options: NetworkCaptureOptions = {},
   ) {
     this.ignorePatterns = compileIgnorePatterns(options.ignoreUrls);
   }
 
-  /** Enable network tracking and start capturing. */
+  /** Enable network tracking and start capturing. Safe to call again after a failed attempt. */
   async start(): Promise<void> {
+    if (!this.listening) {
+      this.listening = true;
+      this.registerListeners();
+    }
+    await this.enableNetworkDomain();
+  }
+
+  private registerListeners(): void {
     this.cdp.onEvent((method, params) => {
       switch (method) {
         case "Network.requestWillBeSent":
@@ -51,8 +60,6 @@ export class NetworkCapture {
       await this.enableNetworkDomain();
       console.error("[mobile-network-mcp] Reconnected to Metro — network capture re-enabled");
     });
-
-    await this.enableNetworkDomain();
   }
 
   private enableNetworkDomain(): Promise<unknown> {
@@ -131,7 +138,7 @@ export class NetworkCapture {
             flow.response.body = `[base64 encoded, ${result.body.length} chars]`;
           } else {
             flow.response.body = result.body;
-            flow.response.bodySize = result.body.length;
+            flow.response.bodySize = Buffer.byteLength(result.body, "utf8");
             markIfTruncated(flow.response, result.body);
           }
         }

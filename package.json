@@ -8,7 +8,7 @@
     "mobile-network-mcp": "dist/bin/cli.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
     "dev": "tsc --watch",
     "start": "node dist/bin/cli.js",
     "test": "node --test dist/test/*.test.js",

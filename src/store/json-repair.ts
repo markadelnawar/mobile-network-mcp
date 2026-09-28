@@ -22,9 +22,19 @@ export function repairTruncatedJson(text: string): RepairedJson | undefined {
   let candidate = text.trimEnd();
   const first = candidate.trimStart()[0];
   if (first !== "{" && first !== "[") return undefined;
+  try {
+    return { value: JSON.parse(candidate), droppedChars: 0 };
+  } catch {
+    // not intact — fall through to repair
+  }
+
+  // If the outermost container is already closed, the failure is not a cut tail
+  // (trailing garbage, NDJSON, …) and closing brackets cannot fix it.
+  const shape = scan(candidate);
+  if (shape.stack.length === 0 && !shape.inString) return undefined;
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS && candidate.length > 0; attempt++) {
-    const closed = closeOpenStructures(candidate);
+    const closed = closeOpenStructures(candidate, attempt === 0);
     if (closed !== undefined) {
       try {
         return { value: JSON.parse(closed), droppedChars: text.trimEnd().length - candidate.length };
@@ -65,8 +75,13 @@ function scan(text: string, onSeparator?: (index: number, ch: string) => void): 
   return state;
 }
 
-/** Append the closers needed to make `text` well-formed, or undefined if it ends on a dangling `:`. */
-function closeOpenStructures(text: string): string | undefined {
+/**
+ * Append the closers needed to make `text` well-formed, or undefined if it ends
+ * on a dangling `:`. `suspectTrailingNumber` is true for the original cut tail,
+ * where a final number may have lost digits; after cutting back to a separator
+ * the last value is known to be complete.
+ */
+function closeOpenStructures(text: string, suspectTrailingNumber: boolean): string | undefined {
   const state = scan(text);
   let out = text;
   if (state.inString) {
@@ -74,6 +89,9 @@ function closeOpenStructures(text: string): string | undefined {
     out += '"';
   }
   out = out.trimEnd();
+  // A number at the very end may have lost digits ("19" for "1999", "1e" for "1e5"):
+  // drop it rather than return a wrong-but-valid value.
+  if (!state.inString && suspectTrailingNumber) out = out.replace(/[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d*)?$/, "").trimEnd();
   if (out.endsWith(",")) out = out.slice(0, -1).trimEnd();
   if (out.endsWith(":")) return undefined;
   for (let i = state.stack.length - 1; i >= 0; i--) {

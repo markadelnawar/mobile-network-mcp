@@ -41,7 +41,8 @@ iOS/Android/Flutter re-integration plan lives separately in
   bytes off its tail (noon: 212 of 974,983 bytes on a deals response; 312 on a
   search). The app is unaffected — only the DevTools/CDP copy is short. The
   server detects it (`encodedDataLength` vs captured bytes → `response.truncated`),
-  auto-repairs the JSON prefix (`store/json-repair.ts`) and warns in every
+  auto-repairs the JSON prefix (`store/json-repair.ts`, only for flagged bodies —
+  a partial trailing number is dropped rather than guessed) and warns in every
   response tool. Fix belongs upstream: use `lengthOfBytesUsingEncoding:NSUTF8StringEncoding`.
 
 ---

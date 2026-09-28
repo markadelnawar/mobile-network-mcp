@@ -97,9 +97,10 @@ export class RequestStore {
       flow._parsedJson = JSON.parse(flow.response.body);
       return { ok: true, value: flow._parsedJson };
     } catch {
-      // A body cut short by the capture source (see CapturedResponse.truncated) is
-      // still mostly usable: recover the parseable prefix and flag it.
-      const repaired = repairTruncatedJson(flow.response.body);
+      // Only a body the capture source *knows* was cut short (CapturedResponse.truncated)
+      // is repaired: for it the parseable prefix is exact and the tools warn. Any other
+      // unparseable body is reported as-is — guessing there would return confident nonsense.
+      const repaired = flow.response.truncated ? repairTruncatedJson(flow.response.body) : undefined;
       if (repaired) {
         flow._parsedJson = repaired.value;
         flow._jsonRepaired = true;

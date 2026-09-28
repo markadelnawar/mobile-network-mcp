@@ -193,3 +193,21 @@ describe("NetworkCapture truncation detection", () => {
     for (const flow of store.list().flows) assert.equal(flow.response?.truncated, undefined);
   });
 });
+
+describe("NetworkCapture.start", () => {
+  it("registers its listeners once even when start() is retried", async () => {
+    const cdp = new FakeCDP();
+    const store = new RequestStore();
+    const capture = new NetworkCapture(cdp.asClient(), store);
+    await capture.start();
+    await capture.start();
+    assert.equal(cdp.count("Network.enable"), 2);
+    cdp.bodies.set("r", { body: "{}" });
+    request(cdp, "r", "https://api.example.com/once");
+    response(cdp, "r");
+    await finish(cdp, "r");
+    assert.equal(store.size, 1); // a duplicated listener would have stored it twice
+    await cdp.reconnect();
+    assert.equal(cdp.count("Network.enable"), 3); // one onConnected handler, not two
+  });
+});
