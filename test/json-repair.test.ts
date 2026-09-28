@@ -42,7 +42,20 @@ describe("repairTruncatedJson", () => {
 
   it("handles escaped quotes inside strings", () => {
     const cut = '{"msg":"he said \\"hi\\", then","next":[1';
-    assert.deepEqual(repairTruncatedJson(cut)?.value, { msg: 'he said "hi", then', next: [1] });
+    // the trailing "1" might be "1..." — dropped, not guessed
+    assert.deepEqual(repairTruncatedJson(cut)?.value, { msg: 'he said "hi", then', next: [] });
+  });
+
+  it("drops a trailing number that may have lost digits instead of returning a wrong value", () => {
+    assert.deepEqual(repairTruncatedJson('{"items":[{"id":1,"price":1999},{"id":2,"price":25')?.value, { items: [{ id: 1, price: 1999 }, { id: 2 }] });
+    assert.deepEqual(repairTruncatedJson("[1,2,3")?.value, [1, 2]);
+    assert.deepEqual(repairTruncatedJson('{"n":1e5')?.value, {});
+    assert.deepEqual(repairTruncatedJson('{"n":-')?.value, {});
+  });
+
+  it("refuses to 'repair' documents whose top level is already closed (trailing garbage, NDJSON)", () => {
+    assert.equal(repairTruncatedJson('{"ok":true,"total":42}trailing-garbage'), undefined);
+    assert.equal(repairTruncatedJson('{"a":1}\n{"b":2}'), undefined);
   });
 
   it("gives up on bodies that are not JSON", () => {

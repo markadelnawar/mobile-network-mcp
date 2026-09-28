@@ -1,12 +1,13 @@
 // Manual e2e helper (not part of npm test). Run from the repo root after `npm run build`,
 // with Metro on :8081 and the RN app in the simulator: node scripts/e2e/mcp-final.mjs
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+const IGNORE = process.env.MNM_E2E_IGNORE ?? "tracking|analytics|adtracker|etracker|recapi/ingest|nooncdn\\\\.com|mp-ads-api"; // noise for the test app; override for yours
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 const CLI = new URL("../../dist/bin/cli.js", import.meta.url).pathname;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 let serverLog = "";
-const transport = new StdioClientTransport({ command: "node", args: [CLI, "--source", "cdp", "--port", "8081", "--ingest-port", "7899", "-i", "tracking|analytics|adtracker|etracker|recapi/ingest|nooncdn\\.com|mp-ads-api"], stderr: "pipe" });
+const transport = new StdioClientTransport({ command: "node", args: [CLI, "--source", "cdp", "--port", "8081", "--ingest-port", "7899", "-i", IGNORE], stderr: "pipe" });
 transport.stderr?.on("data", (d) => { const t = d.toString(); serverLog += t; for (const l of t.trimEnd().split("\n")) log("  [server]", l); });
 const client = new Client({ name: "e2e-final", version: "0.0.0" });
 await client.connect(transport);

@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { CDPClient } from "./capture/cdp-client.js";
+import { CDPClient, isNetworkDomainUnsupported } from "./capture/cdp-client.js";
 import { IngestServer } from "./capture/ingest-server.js";
 import { NetworkCapture } from "./capture/network-capture.js";
 import { ProxymanCapture } from "./capture/proxyman-capture.js";
@@ -167,26 +167,26 @@ export async function createServer(config: ServerConfig): Promise<McpServer> {
 }
 
 const CDP_RETRY_DELAY_MS = 3000;
+const ENABLE_ATTEMPTS = 3;
 
 /**
- * Keep trying until Metro exposes a debuggable app. MCP clients launch this
- * server at session start — usually *before* the developer has started the app —
- * so giving up after a few attempts would silently capture nothing all session.
- * Once connected, CDPClient handles later drops (app relaunch, Metro restart) itself.
+ * Drive `connect()` until Metro exposes a debuggable app — MCP clients launch
+ * this server at session start, usually *before* the developer has started the
+ * app — then enable the Network domain. From the first successful connection on,
+ * CDPClient owns reconnection (app relaunch, Metro restart) and NetworkCapture
+ * re-enables the domain via onConnected, so this loop ends there. It also ends
+ * when the runtime says the Network domain does not exist (React Native < 0.83):
+ * retrying would never help, and the ingest server remains the way in.
  */
 async function connectWithRetry(
   cdp: CDPClient,
   capture: NetworkCapture,
   config: ServerConfig,
 ): Promise<void> {
+  const where = `${config.metroHost}:${config.metroPort}`;
   for (let attempt = 1; ; attempt++) {
     try {
       await cdp.connect();
-      await capture.start();
-      console.error(
-        `[mobile-network-mcp] Connected to Metro on ${config.metroHost}:${config.metroPort}${attempt > 1 ? ` (attempt ${attempt})` : ""}`,
-      );
-      return;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       // Log the first few failures and then every 20th (~1/min) so a missing app doesn't flood stderr.
@@ -196,7 +196,34 @@ async function connectWithRetry(
         );
       }
       await new Promise((r) => setTimeout(r, CDP_RETRY_DELAY_MS));
+      continue;
     }
+
+    for (let enableAttempt = 1; enableAttempt <= ENABLE_ATTEMPTS; enableAttempt++) {
+      try {
+        await capture.start();
+        console.error(`[mobile-network-mcp] Connected to Metro on ${where}${attempt > 1 ? ` (attempt ${attempt})` : ""}`);
+        return;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (isNetworkDomainUnsupported(err)) {
+          console.error(
+            `[mobile-network-mcp] CDP capture unavailable — the runtime has no CDP Network domain (React Native < 0.83): ${message}. ` +
+              `Flows still arrive through the ingest server: add interceptor.js to the app or paste the Proxyman script (--print-proxyman-script).`,
+          );
+          await cdp.disconnect();
+          return;
+        }
+        if (!cdp.connected) {
+          console.error(`[mobile-network-mcp] Socket dropped while enabling capture (${message}); it will be re-enabled on reconnect`);
+          return;
+        }
+        console.error(`[mobile-network-mcp] Network.enable failed (${message}) — retry ${enableAttempt}/${ENABLE_ATTEMPTS}`);
+        await new Promise((r) => setTimeout(r, CDP_RETRY_DELAY_MS));
+      }
+    }
+    console.error(`[mobile-network-mcp] Network.enable kept failing on an open socket; capture will resume if Metro reconnects`);
+    return;
   }
 }
 

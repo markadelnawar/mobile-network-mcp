@@ -1,5 +1,7 @@
 // Manual e2e helper (not part of npm test). Run from the repo root after `npm run build`,
 // with Metro on :8081 and the RN app in the simulator: node scripts/e2e/cdp-body-probe.mjs
+const API_HOST = process.env.MNM_E2E_API_HOST ?? "api-app.noon.com"; // your API host (regex-escaped below)
+const API_HOST_RE = API_HOST.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 import WebSocket from "ws";
 const port = 8081;
 const targets = await (await fetch(`http://localhost:${port}/json`)).json();
@@ -19,7 +21,7 @@ await new Promise(r => setTimeout(r, 100000));
 const json = done.filter(f => (resps.get(f.requestId)?.mimeType || '').includes('json'));
 console.log(`finished=${done.length} json=${json.length}`);
 for (const f of json.sort((a, b) => (b.encodedDataLength || 0) - (a.encodedDataLength || 0)).slice(0, 6)) {
-  const url = (reqs.get(f.requestId) || '').replace(/^https:\/\/api-app\.noon\.com/, ''); const r = resps.get(f.requestId);
+  const url = (reqs.get(f.requestId) || '').replace(new RegExp("^https://" + API_HOST_RE), ''); const r = resps.get(f.requestId);
   try { const b = await send('Network.getResponseBody', { requestId: f.requestId }); const body = b.body || '';
     let parse = 'ok'; try { JSON.parse(body); } catch (e) { parse = 'FAIL ' + e.message.slice(0, 60); }
     console.log(`\n${url.slice(0, 70)}\n  encodedDataLength=${f.encodedDataLength} content-length=${r?.headers?.['content-length'] ?? r?.headers?.['Content-Length'] ?? '-'} content-encoding=${r?.headers?.['content-encoding'] ?? '-'}\n  body.length=${body.length} base64=${b.base64Encoded} utf8Bytes=${Buffer.byteLength(body)} parse=${parse}\n  head=${body.slice(0, 50).replace(/\s+/g, ' ')}\n  tail=${body.slice(-50).replace(/\s+/g, ' ')}`);

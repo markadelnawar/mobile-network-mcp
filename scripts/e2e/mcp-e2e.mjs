@@ -3,6 +3,9 @@
 // E2E: drive the patched server (--source cdp) over MCP stdio, like Claude Code would.
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+const API_HOST = process.env.MNM_E2E_API_HOST ?? "api-app.noon.com"; // your API host (regex-escaped below)
+const API_HOST_RE = API_HOST.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const IGNORE = process.env.MNM_E2E_IGNORE ?? "tracking|analytics|adtracker|etracker|recapi/ingest|nooncdn\\\\.com"; // noise for the test app; override for yours
 import WebSocket from "ws";
 
 const CLI = new URL("../../dist/bin/cli.js", import.meta.url).pathname;
@@ -12,7 +15,7 @@ let serverLog = "";
 
 const transport = new StdioClientTransport({
   command: "node",
-  args: [CLI, "--source", "cdp", "--port", "8081", "--ingest-port", "7899", "-i", "tracking|analytics|adtracker|etracker|recapi/ingest|nooncdn\\.com"],
+  args: [CLI, "--source", "cdp", "--port", "8081", "--ingest-port", "7899", "-i", IGNORE],
   stderr: "pipe",
 });
 transport.stderr?.on("data", (d) => { const t = d.toString(); serverLog += t; for (const l of t.trimEnd().split("\n")) log("  [server]", l); });
@@ -35,7 +38,7 @@ async function waitForFlows(minCount, timeoutMs) {
 log("PHASE A: waiting for app traffic...");
 let listing = await waitForFlows(1, 90000);
 log("list_requests ->\n" + listing);
-const row = listing.split("\n").find((l) => /api-app\.noon\.com.*search/.test(l)) ?? listing.split("\n").find((l) => /api-app\.noon\.com/.test(l));
+const row = listing.split("\n").find((l) => new RegExp(API_HOST_RE + ".*search").test(l)) ?? listing.split("\n").find((l) => new RegExp(API_HOST_RE).test(l));
 if (row) {
   const id = parseInt(row.trim().split("|")[0], 10);
   const schema = await call("get_response_schema", { request_id: id, max_depth: 3 });
