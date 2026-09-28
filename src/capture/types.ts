@@ -16,6 +16,12 @@ export interface CapturedResponse {
   bodySize: number;
   // compressed
   encodedDataLength: number;
+  /**
+   * Set when the capture source handed us fewer body bytes than the response
+   * really had — e.g. RN 0.87 iOS's inspector drops the tail of any body with
+   * non-ASCII text (RCTNetworkConversions.h sizes the UTF-8 copy by UTF-16 length).
+   */
+  truncated?: { capturedBytes: number; expectedBytes: number; reason: string };
 }
 
 export interface CapturedFlow {
@@ -30,6 +36,8 @@ export interface CapturedFlow {
   /** Lazily parsed JSON body — populated on first schema/query access */
   _parsedJson?: unknown;
   _jsonParseAttempted?: boolean;
+  /** True when `_parsedJson` came from repairing a truncated body (see store/json-repair.ts). */
+  _jsonRepaired?: boolean;
 }
 
 export interface CDPTarget {

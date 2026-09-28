@@ -2,6 +2,10 @@ import WebSocket from "ws";
 import type { CDPTarget } from "./types.js";
 
 export type CDPEventHandler = (method: string, params: Record<string, unknown>) => void;
+export type CDPConnectHandler = () => void | Promise<void>;
+
+const RECONNECT_DELAY_MS = 3000;
+const COMMAND_TIMEOUT_MS = 10_000;
 
 /**
  * Minimal CDP client that connects to Metro's inspector proxy via WebSocket.
@@ -15,8 +19,10 @@ export class CDPClient {
     { resolve: (result: unknown) => void; reject: (err: Error) => void }
   >();
   private eventHandlers: CDPEventHandler[] = [];
+  private connectHandlers: CDPConnectHandler[] = [];
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private _connected = false;
+  private closedByUser = false;
 
   constructor(
     private metroPort: number,
@@ -32,10 +38,21 @@ export class CDPClient {
   }
 
   /**
+   * Register a handler that runs after every connection established AFTER the
+   * handler was registered — i.e. on reconnects. Metro forgets all enabled CDP
+   * domains when the socket drops (app reload, Metro restart), so captures use
+   * this to re-send their `*.enable` commands.
+   */
+  onConnected(handler: CDPConnectHandler): void {
+    this.connectHandlers.push(handler);
+  }
+
+  /**
    * Discover available CDP targets from Metro's /json endpoint,
    * then connect to the first suitable one.
    */
   async connect(): Promise<void> {
+    this.closedByUser = false;
     const targets = await this.discoverTargets();
     const target = this.pickTarget(targets);
 
@@ -59,20 +76,29 @@ export class CDPClient {
     const message = JSON.stringify({ id, method, params });
 
     return new Promise((resolve, reject) => {
-      this.pendingCallbacks.set(id, { resolve, reject });
-      this.ws!.send(message);
-
-      // Timeout after 10s
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         if (this.pendingCallbacks.has(id)) {
           this.pendingCallbacks.delete(id);
           reject(new Error(`CDP command timed out: ${method}`));
         }
-      }, 10_000);
+      }, COMMAND_TIMEOUT_MS);
+
+      this.pendingCallbacks.set(id, {
+        resolve: (result) => {
+          clearTimeout(timer);
+          resolve(result);
+        },
+        reject: (err) => {
+          clearTimeout(timer);
+          reject(err);
+        },
+      });
+      this.ws!.send(message);
     });
   }
 
   async disconnect(): Promise<void> {
+    this.closedByUser = true;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -105,36 +131,78 @@ export class CDPClient {
     );
   }
 
+  /**
+   * Origin sent with the WebSocket upgrade.
+   *
+   * Since RN 0.8x, `@react-native/dev-middleware` guards the debugger socket
+   * with a `verifyClient` hook that only admits requests whose Origin is
+   * Metro's own origin or whose hostname is `localhost`/`127.0.0.1`. A request
+   * with no Origin header — the `ws` default for non-browser clients — is
+   * rejected with `401 Unauthorized`. Presenting Metro's own origin is what
+   * React Native DevTools (served by Metro) does, so it is accepted everywhere.
+   */
+  private get originHeader(): string {
+    return `http://${this.metroHost}:${this.metroPort}`;
+  }
+
   private connectWebSocket(wsUrl: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.ws = new WebSocket(wsUrl);
+      const ws = new WebSocket(wsUrl, { origin: this.originHeader });
+      this.ws = ws;
 
-      this.ws.on("open", () => {
+      ws.on("open", () => {
         this._connected = true;
         resolve();
+        void this.fireConnected();
       });
 
-      this.ws.on("message", (data: WebSocket.Data) => {
+      // `ws` emits this instead of "error" when the upgrade gets a non-101 response.
+      ws.on("unexpected-response", (_req, res) => {
+        reject(
+          new Error(
+            `Metro refused the debugger WebSocket (HTTP ${res.statusCode}). ` +
+              `Sent Origin "${this.originHeader}"; Metro only accepts its own origin or a localhost hostname.`,
+          ),
+        );
+      });
+
+      ws.on("message", (data: WebSocket.Data) => {
         this.handleMessage(data.toString());
       });
 
-      this.ws.on("close", () => {
+      ws.on("close", () => {
         this._connected = false;
-        // Auto-reconnect after 3s
-        this.reconnectTimer = setTimeout(() => {
-          this.connect().catch(() => {
-            // Silently retry — will keep attempting
-          });
-        }, 3000);
+        if (this.closedByUser) return;
+        this.scheduleReconnect();
       });
 
-      this.ws.on("error", (err) => {
+      ws.on("error", (err) => {
         if (!this._connected) {
           reject(err);
         }
         // If already connected, the close handler will trigger reconnect
       });
     });
+  }
+
+  /** Retry every RECONNECT_DELAY_MS until a target is back (e.g. after an app reload). */
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer || this.closedByUser) return;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect().catch(() => this.scheduleReconnect());
+    }, RECONNECT_DELAY_MS);
+  }
+
+  private async fireConnected(): Promise<void> {
+    for (const handler of this.connectHandlers) {
+      try {
+        await handler();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[mobile-network-mcp] onConnected handler failed: ${message}`);
+      }
+    }
   }
 
   private handleMessage(raw: string): void {

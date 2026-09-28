@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { compileIgnorePatterns, matchesAnyPattern } from "./url-filter.js";
 import type { RequestStore } from "../store/request-store.js";
 import type { CapturedFlow } from "./types.js";
 
@@ -23,13 +24,7 @@ export class IngestServer {
     options: IngestServerOptions = {},
   ) {
     this.port = options.port ?? DEFAULT_PORT;
-    this.ignorePatterns = (options.ignoreUrls ?? []).map((p) => {
-      try {
-        return new RegExp(p, "i");
-      } catch {
-        return new RegExp(p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-      }
-    });
+    this.ignorePatterns = compileIgnorePatterns(options.ignoreUrls);
   }
 
   async start(): Promise<number> {
@@ -202,9 +197,6 @@ export class IngestServer {
   }
 
   private shouldIgnore(url: string): boolean {
-    for (const pattern of this.ignorePatterns) {
-      if (pattern.test(url)) return true;
-    }
-    return false;
+    return matchesAnyPattern(url, this.ignorePatterns);
   }
 }

@@ -11,6 +11,11 @@ iOS/Android/Flutter re-integration plan lives separately in
 - **Method 1 — Proxyman CLI capture:** ✅ pipeline validated (poller pulled 500
   flows), but needs the cursor fixes in #2 before shipping.
 - **Method 2 — RN in-app interceptor:** ⬜ not yet tested end-to-end.
+- **Method 4 — CDP / Metro inspector (`--source cdp`):** ✅ validated on noon
+  RN 0.87.1 (2026-09-27) after three fixes: send a localhost `Origin` on the
+  debugger socket (dev-middleware 0.8x answers 401 without it), apply `-i` on
+  the CDP path (it previously only filtered ingest/Proxyman), and re-send
+  `Network.enable` after Metro reconnects (app reload silently killed capture).
 
 ## Implementation status (code)
 - ✅ #1 ingest body hardening (server-side `bodyToString` + proxyman.js `asString`)
@@ -29,6 +34,15 @@ iOS/Android/Flutter re-integration plan lives separately in
 - **CDP door is dead on RN < 0.83** — Hermes returns "Unsupported method
   'Network.enable'" (verified on noon's RN 0.77). Use Proxyman or the in-app
   interceptor there.
+- **RN 0.87 iOS truncates inspector bodies with non-ASCII text.**
+  `Libraries/Network/RCTNetworkConversions.h` builds the `std::string_view` of
+  the body with `string.length` (UTF-16 units) over the UTF-8 buffer, so every
+  response containing Arabic/emoji/curly quotes loses (utf8Bytes − utf16Length)
+  bytes off its tail (noon: 212 of 974,983 bytes on a deals response; 312 on a
+  search). The app is unaffected — only the DevTools/CDP copy is short. The
+  server detects it (`encodedDataLength` vs captured bytes → `response.truncated`),
+  auto-repairs the JSON prefix (`store/json-repair.ts`) and warns in every
+  response tool. Fix belongs upstream: use `lengthOfBytesUsingEncoding:NSUTF8StringEncoding`.
 
 ---
 

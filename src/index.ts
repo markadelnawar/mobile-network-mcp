@@ -156,7 +156,7 @@ export async function createServer(config: ServerConfig): Promise<McpServer> {
     });
   } else if (source === "cdp") {
     const cdp = new CDPClient(config.metroPort, config.metroHost);
-    const capture = new NetworkCapture(cdp, store);
+    const capture = new NetworkCapture(cdp, store, { ignoreUrls: config.ignoreUrls });
     connectWithRetry(cdp, capture, config).catch(() => {
       // Connection retries are handled internally
     });
@@ -166,34 +166,38 @@ export async function createServer(config: ServerConfig): Promise<McpServer> {
   return server;
 }
 
+const CDP_RETRY_DELAY_MS = 3000;
+
+/**
+ * Keep trying until Metro exposes a debuggable app. MCP clients launch this
+ * server at session start — usually *before* the developer has started the app —
+ * so giving up after a few attempts would silently capture nothing all session.
+ * Once connected, CDPClient handles later drops (app relaunch, Metro restart) itself.
+ */
 async function connectWithRetry(
   cdp: CDPClient,
   capture: NetworkCapture,
   config: ServerConfig,
-  maxRetries: number = 5,
 ): Promise<void> {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  for (let attempt = 1; ; attempt++) {
     try {
       await cdp.connect();
       await capture.start();
       console.error(
-        `[mobile-network-mcp] Connected to Metro on ${config.metroHost}:${config.metroPort}`,
+        `[mobile-network-mcp] Connected to Metro on ${config.metroHost}:${config.metroPort}${attempt > 1 ? ` (attempt ${attempt})` : ""}`,
       );
       return;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error(
-        `[mobile-network-mcp] Connection attempt ${attempt}/${maxRetries} failed: ${message}`,
-      );
-      if (attempt < maxRetries) {
-        await new Promise((r) => setTimeout(r, 3000));
+      // Log the first few failures and then every 20th (~1/min) so a missing app doesn't flood stderr.
+      if (attempt <= 3 || attempt % 20 === 0) {
+        console.error(
+          `[mobile-network-mcp] Metro connection attempt ${attempt} failed: ${message} — retrying every ${CDP_RETRY_DELAY_MS / 1000}s`,
+        );
       }
+      await new Promise((r) => setTimeout(r, CDP_RETRY_DELAY_MS));
     }
   }
-  console.error(
-    `[mobile-network-mcp] Could not connect to Metro after ${maxRetries} attempts. ` +
-      `The server is running — requests will be captured once Metro is available.`,
-  );
 }
 
 /** Start the MCP server with stdio transport. */

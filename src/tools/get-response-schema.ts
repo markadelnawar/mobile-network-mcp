@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { RequestStore } from "../store/request-store.js";
 import { inferSchema, renderSchema } from "json-schema-sketch";
+import { truncationNotice } from "./notices.js";
 
 export const getResponseSchemaInputSchema = z.object({
   request_id: z.number().describe("Request ID from list_requests"),
@@ -29,14 +30,14 @@ export function getResponseSchema(store: RequestStore, input: GetResponseSchemaI
   if (!parsed.ok) {
     // Non-JSON response — show basic info
     const mimeType = flow.response.mimeType || "unknown";
-    return `${header}${statusInfo}\n\nResponse is ${mimeType}, not JSON. Use get_response_raw to see the body.`;
+    return `${header}${statusInfo}\n\n${truncationNotice(flow)}Response is ${mimeType}, not JSON. Use get_response_raw to see the body.`;
   }
 
   const maxDepth = input.max_depth ?? 6;
   const schema = inferSchema(parsed.value, { maxDepth });
   const rendered = renderSchema(schema, { showStringLengths: input.show_string_lengths ?? false });
 
-  return `${header}${statusInfo}\n\nResponse schema:\n${rendered}`;
+  return `${header}${statusInfo}\n\n${truncationNotice(flow)}Response schema:\n${rendered}`;
 }
 
 function shortenUrl(url: string): string {
