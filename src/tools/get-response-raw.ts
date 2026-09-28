@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { RequestStore } from "../store/request-store.js";
+import { truncationNotice } from "./notices.js";
 
 export const getResponseRawSchema = z.object({
   request_id: z.number().describe("Request ID from list_requests"),
@@ -40,7 +41,7 @@ export function getResponseRaw(store: RequestStore, input: GetResponseRawInput):
     truncated = true;
   }
 
-  let output = `${header} — ${statusLine}\nContent-Type: ${mimeType}\nBody size: ${flow.response.bodySize}B\n\n${body}`;
+  let output = `${truncationNotice(flow)}${header} — ${statusLine}\nContent-Type: ${mimeType}\nBody size: ${flow.response.bodySize}B\n\n${body}`;
 
   if (truncated) {
     output += `\n\n... [truncated at ${maxBytes} bytes, total ${flow.response.bodySize}B]`;

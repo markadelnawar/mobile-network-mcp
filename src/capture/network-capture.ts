@@ -1,6 +1,12 @@
 import type { CDPClient } from "./cdp-client.js";
 import type { RequestStore } from "../store/request-store.js";
 import type { CapturedFlow, CapturedRequest, CapturedResponse } from "./types.js";
+import { compileIgnorePatterns, matchesAnyPattern } from "./url-filter.js";
+
+export interface NetworkCaptureOptions {
+  /** URL patterns (regex or literal) to drop before they reach the store — same semantics as `-i`. */
+  ignoreUrls?: string[];
+}
 
 /**
  * Listens to CDP Network.* events and populates the RequestStore.
@@ -9,11 +15,15 @@ import type { CapturedFlow, CapturedRequest, CapturedResponse } from "./types.js
 export class NetworkCapture {
   /** In-flight requests keyed by CDP requestId (string) */
   private inflight = new Map<string, CapturedFlow>();
+  private ignorePatterns: RegExp[];
 
   constructor(
     private cdp: CDPClient,
     private store: RequestStore,
-  ) {}
+    options: NetworkCaptureOptions = {},
+  ) {
+    this.ignorePatterns = compileIgnorePatterns(options.ignoreUrls);
+  }
 
   /** Enable network tracking and start capturing. */
   async start(): Promise<void> {
@@ -34,15 +44,32 @@ export class NetworkCapture {
       }
     });
 
-    await this.cdp.send("Network.enable", { maxTotalBufferSize: 10_000_000 });
+    // Metro drops the Network domain with the socket (app reload, Metro restart):
+    // re-enable it on every reconnect, and forget requests the old session left open.
+    this.cdp.onConnected(async () => {
+      this.inflight.clear();
+      await this.enableNetworkDomain();
+      console.error("[mobile-network-mcp] Reconnected to Metro — network capture re-enabled");
+    });
+
+    await this.enableNetworkDomain();
+  }
+
+  private enableNetworkDomain(): Promise<unknown> {
+    return this.cdp.send("Network.enable", { maxTotalBufferSize: 10_000_000 });
   }
 
   private onRequestWillBeSent(params: Record<string, unknown>): void {
     const requestId = params.requestId as string;
     const req = params.request as Record<string, unknown>;
+    const url = req.url as string;
+
+    // Dropping here means the later response/finished events for this id find
+    // nothing in `inflight` and are discarded too — no body fetch, no store entry.
+    if (matchesAnyPattern(url, this.ignorePatterns)) return;
 
     const captured: CapturedRequest = {
-      url: req.url as string,
+      url,
       method: req.method as string,
       headers: (req.headers as Record<string, string>) ?? {},
       body: req.postData as string | undefined,
@@ -105,6 +132,7 @@ export class NetworkCapture {
           } else {
             flow.response.body = result.body;
             flow.response.bodySize = result.body.length;
+            markIfTruncated(flow.response, result.body);
           }
         }
       } catch {
@@ -136,5 +164,24 @@ export class NetworkCapture {
     };
 
     this.store.add(flow);
+  }
+}
+
+/**
+ * RN reports `encodedDataLength` as the number of body bytes it received. If the
+ * body it hands back is shorter, the inspector's copy was cut. (A gzip'd
+ * response reports its *compressed* length on some platforms — smaller than the
+ * text — so a body longer than expected is never flagged.)
+ */
+function markIfTruncated(response: CapturedResponse, body: string): void {
+  const expected = response.encodedDataLength;
+  if (!expected) return;
+  const captured = Buffer.byteLength(body, "utf8");
+  if (captured < expected) {
+    response.truncated = {
+      capturedBytes: captured,
+      expectedBytes: expected,
+      reason: "React Native inspector stored a short copy of the body",
+    };
   }
 }

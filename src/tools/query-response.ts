@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { RequestStore } from "../store/request-store.js";
 import { resolvePath } from "json-schema-sketch";
+import { truncationNotice } from "./notices.js";
 
 export const queryResponseSchema = z.object({
   request_id: z.number().describe("Request ID from list_requests"),
@@ -47,10 +48,11 @@ export function queryResponse(store: RequestStore, input: QueryResponseInput): s
 
   const maxItems = input.max_items ?? 5;
   const header = `Request #${flow.id}: ${flow.request.method} ${shortenUrl(flow.request.url)}`;
+  const notice = truncationNotice(flow);
 
   // Single path — detailed output
   if (allPaths.length === 1) {
-    return formatSingleResult(parsed.value, allPaths[0], maxItems, header);
+    return notice + formatSingleResult(parsed.value, allPaths[0], maxItems, header);
   }
 
   // Multi-path — compact output
@@ -70,7 +72,7 @@ export function queryResponse(store: RequestStore, input: QueryResponseInput): s
     }
   }
 
-  return `${header}\n\n${sections.join("\n\n")}`;
+  return `${notice}${header}\n\n${sections.join("\n\n")}`;
 }
 
 function formatSingleResult(root: unknown, path: string, maxItems: number, header: string): string {

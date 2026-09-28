@@ -50,6 +50,11 @@ export function listRequests(store: RequestStore, input: ListRequestsInput): str
     lines.push(`${id} | ${method} | ${status} | ${url} | ${size} | ${time}`);
   }
 
+  const truncatedCount = flows.filter((f) => f.response?.truncated).length;
+  if (truncatedCount > 0) {
+    lines.push(`\n! ${truncatedCount} listed response(s) were cut short by the capture source — the response tools show the details.`);
+  }
+
   const showing = flows.length;
   const offset = input.offset ?? 0;
   if (total > showing) {

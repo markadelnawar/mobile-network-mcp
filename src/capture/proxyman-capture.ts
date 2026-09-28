@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { compileIgnorePatterns, matchesAnyPattern } from "./url-filter.js";
 import { readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -38,13 +39,7 @@ export class ProxymanCapture {
     this.cliPath = options.cliPath ?? DEFAULT_CLI_PATH;
     this.pollInterval = options.pollInterval ?? DEFAULT_POLL_INTERVAL_MS;
     this.domains = options.domains ?? [];
-    this.ignorePatterns = (options.ignoreUrls ?? []).map((p) => {
-      try {
-        return new RegExp(p, "i");
-      } catch {
-        return new RegExp(p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-      }
-    });
+    this.ignorePatterns = compileIgnorePatterns(options.ignoreUrls);
   }
 
   async start(): Promise<void> {
@@ -282,10 +277,7 @@ export class ProxymanCapture {
   }
 
   private shouldIgnore(url: string): boolean {
-    for (const pattern of this.ignorePatterns) {
-      if (pattern.test(url)) return true;
-    }
-    return false;
+    return matchesAnyPattern(url, this.ignorePatterns);
   }
 
   private parseRequest(raw: string): CapturedRequest | null {

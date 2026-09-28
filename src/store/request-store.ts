@@ -1,4 +1,5 @@
 import type { CapturedFlow } from "../capture/types.js";
+import { repairTruncatedJson } from "./json-repair.js";
 
 export interface FilterOptions {
   urlPattern?: string;
@@ -96,6 +97,14 @@ export class RequestStore {
       flow._parsedJson = JSON.parse(flow.response.body);
       return { ok: true, value: flow._parsedJson };
     } catch {
+      // A body cut short by the capture source (see CapturedResponse.truncated) is
+      // still mostly usable: recover the parseable prefix and flag it.
+      const repaired = repairTruncatedJson(flow.response.body);
+      if (repaired) {
+        flow._parsedJson = repaired.value;
+        flow._jsonRepaired = true;
+        return { ok: true, value: flow._parsedJson };
+      }
       return { ok: false, error: "Response body is not valid JSON" };
     }
   }

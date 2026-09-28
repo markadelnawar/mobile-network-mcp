@@ -124,3 +124,41 @@ describe("RequestStore", () => {
     assert.ok(result.error.includes("not valid JSON"));
   });
 });
+
+describe("RequestStore.getParsedJson repair", () => {
+  it("recovers a truncated JSON body and flags the flow as repaired", () => {
+    const store = new RequestStore();
+    const flow = store.add(
+      makeFlow({
+        response: {
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          mimeType: "application/json",
+          body: '{"items":[{"id":1},{"id":2,"name":"ab',
+          bodySize: 38,
+          encodedDataLength: 60,
+          truncated: { capturedBytes: 38, expectedBytes: 60, reason: "test" },
+        },
+      }),
+    );
+
+    const parsed = store.getParsedJson(flow);
+    assert.equal(parsed.ok, true);
+    if (parsed.ok) {
+      assert.deepEqual(parsed.value, { items: [{ id: 1 }, { id: 2, name: "ab" }] });
+    }
+    assert.equal(flow._jsonRepaired, true);
+  });
+
+  it("still reports non-JSON bodies as not JSON", () => {
+    const store = new RequestStore();
+    const flow = store.add(
+      makeFlow({
+        response: { status: 200, statusText: "OK", headers: {}, mimeType: "text/html", body: "<html></html>", bodySize: 13, encodedDataLength: 13 },
+      }),
+    );
+    assert.equal(store.getParsedJson(flow).ok, false);
+    assert.equal(flow._jsonRepaired, undefined);
+  });
+});

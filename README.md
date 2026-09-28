@@ -210,6 +210,12 @@ build flag (not just `__DEV__`). iOS/Android/Flutter snippets live on the
 
 > **CDP / React Native Metro** capture (`--source cdp`) requires **RN 0.83+**
 > (Hermes' `Network` domain). On older RN, use one of the methods above.
+> Validated end-to-end on RN 0.87.1. The client presents Metro's own origin
+> (`http://<host>:<port>`) on the debugger socket because
+> `@react-native/dev-middleware` 0.8x rejects origin-less connections with 401.
+> Known RN 0.87 iOS bug: response bodies containing non-ASCII text come back a
+> few hundred bytes short (see PLAN.md). The server flags these, auto-repairs the
+> JSON so `get_response_schema` / `query_response` still work, and says so in the output.
 
 ## MCP tools
 
