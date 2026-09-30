@@ -4,6 +4,7 @@ import { z } from "zod";
 import { homedir } from "node:os";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { createRequire } from "node:module";
 
 import { startCdpSource, type CdpSourceHandle } from "./capture/cdp-source.js";
 import { IngestServer } from "./capture/ingest-server.js";
@@ -21,6 +22,9 @@ import { getResponseRaw, getResponseRawSchema } from "./tools/get-response-raw.j
  * ingest. `cdp` is the same path made explicit; `ingest` skips the Metro
  * attempt; `proxyman` polls proxyman-cli instead.
  */
+/** Package version, read at runtime so the MCP handshake and npm always agree (dist/src → package root). */
+const PACKAGE_VERSION: string = (createRequire(import.meta.url)("../../package.json") as { version: string }).version;
+
 export type CaptureSource = "auto" | "proxyman" | "cdp" | "ingest";
 export const CAPTURE_SOURCES: readonly CaptureSource[] = ["auto", "proxyman", "cdp", "ingest"];
 
@@ -65,7 +69,7 @@ export async function createServer(config: ServerConfig): Promise<McpServer> {
   const server = new McpServer(
     {
       name: "mobile-network-mcp",
-      version: "0.1.0",
+      version: PACKAGE_VERSION,
     },
     {
       capabilities: {
